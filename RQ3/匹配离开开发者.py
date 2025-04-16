@@ -1,62 +1,69 @@
-import os
 import pandas as pd
+import os
 
+# 输入文件夹路径
+input_folder_1 = 'H:/1_合并RQ3.1/all_leave'  # 第一个文件夹路径，包含文件名格式：*_identities_filtered.csv
+input_folder_2 = 'H:/1_合并RQ3.7/all_developer_with_ratios'  # 第二个文件夹路径，包含文件名格式：*_filtered_with_ratio.csv
 
-def process_matching_files(folder1, folder2, output_folder):
-    # 确保输出文件夹存在
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+# 输出文件夹路径（确保文件夹存在）
+output_folder = 'H:/1_合并RQ3.7/all_leave_Matched_Results/'
+os.makedirs(output_folder, exist_ok=True)  # 如果输出文件夹不存在，创建它
 
-    # 获取第一个文件夹中的文件基名映射
-    folder1_files = {}
-    for filename in os.listdir(folder1):
-        if filename.endswith('_identities_filtered.csv'):
-            base_name = filename.replace('_identities_filtered.csv', '')
-            folder1_files[base_name] = os.path.join(folder1, filename)
+# 获取第一个文件夹中的所有csv文件（以_identities_filtered.csv结尾）
+file_list_1 = [f for f in os.listdir(input_folder_1) if f.endswith('_identities_filtered.csv')]
 
-    # 获取第二个文件夹中的文件基名映射
-    folder2_files = {}
-    for filename in os.listdir(folder2):
-        if filename.endswith('_identities.csv'):
-            base_name = filename.replace('_identities.csv', '')
-            folder2_files[base_name] = os.path.join(folder2, filename)
+# 遍历第一个文件夹中的文件
+for file_1 in file_list_1:
+    try:
+        # 构建文件1的完整路径
+        input_file_path_1 = os.path.join(input_folder_1, file_1)
 
-    # 找出两个文件夹中都存在的基名
-    common_base_names = set(folder1_files.keys()) & set(folder2_files.keys())
+        # 获取基础文件名（去掉_identities_filtered.csv后缀）
+        file_name_base = file_1.replace('_identities_filtered.csv', '')
 
-    if not common_base_names:
-        print("没有找到匹配的文件对")
-        return
+        # 构建第二个文件的完整路径（添加_filtered_with_ratio.csv后缀）
+        input_file_path_2 = os.path.join(input_folder_2, file_name_base + '_filtered_with_ratio.csv')
 
-    # 处理每个匹配的文件对
-    for base_name in common_base_names:
-        try:
-            # 读取第一个文件夹中的文件（过滤条件）
-            df_filter = pd.read_csv(folder1_files[base_name])
-            filter_authors = set(df_filter['Author'].unique())
+        # 检查第二个文件是否存在
+        if os.path.exists(input_file_path_2):
+            # 读取第一个文件（开发者信息）
+            df1 = pd.read_csv(input_file_path_1)
+            df1.columns = df1.columns.str.strip()  # 去除列名的前后空格
 
-            # 读取第二个文件夹中的文件（待处理文件）
-            df_main = pd.read_csv(folder2_files[base_name])
+            # 检查是否包含Author列
+            if 'Author' not in df1.columns:
+                print(f"文件 {file_1} 缺少Author列，跳过")
+                continue
 
-            # 添加leave列
-            df_main['leave'] = df_main['Author'].apply(
-                lambda x: 1 if x in filter_authors else 0
-            )
+            authors = df1['Author'].unique()  # 获取唯一的开发者列表
 
-            # 保存结果
-            output_filename = f"{base_name}_with_leave.csv"
-            output_path = os.path.join(output_folder, output_filename)
-            df_main.to_csv(output_path, index=False)
+            # 读取第二个文件（开发者及创建文件比率信息）
+            df2 = pd.read_csv(input_file_path_2)
+            df2.columns = df2.columns.str.strip()  # 去除列名的前后空格
 
-            print(f"已完成文件对: {base_name}")
+            # 检查是否包含Developer和Created Files Ratio列
+            if 'Developer' not in df2.columns or 'Created Files Ratio' not in df2.columns:
+                print(f"文件 {input_file_path_2} 缺少必要列，跳过")
+                continue
 
-        except Exception as e:
-            print(f"处理文件对 {base_name} 时出错: {str(e)}")
+            # 过滤出匹配的开发者
+            matched_developers = df2[df2['Developer'].isin(authors)]
 
+            # 如果有匹配的开发者，则保存结果
+            if not matched_developers.empty:
+                output_data = matched_developers[['Developer', 'Created Files Ratio']]
 
-# 使用示例
-folder1 = 'H:/1_合并RQ3.1/all_leave'  # 包含 _identities_filtered.csv 文件的文件夹
-folder2 = 'H:/1_合并RQ3.1/分为早晚'  # 包含 _identities.csv 文件的文件夹
-output_folder = 'H:/1_合并RQ3.1/分为早晚_离开开发者'  # 保存结果的文件夹
+                # 构建输出文件路径
+                output_file_name = os.path.join(output_folder, f"{file_name_base}_leave_developer_ratio.csv")
 
-process_matching_files(folder1, folder2, output_folder)
+                # 保存结果到新的 CSV 文件
+                output_data.to_csv(output_file_name, index=False)
+                print(f"匹配完成，结果已保存到: {output_file_name}")
+            else:
+                print(f"没有匹配的开发者：{file_name_base}")
+        else:
+            print(f"未找到匹配的文件：{input_file_path_2}")
+    except Exception as e:
+        print(f"处理文件 {file_1} 时发生错误: {str(e)}")
+
+print("所有文件处理完成。")
